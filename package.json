@@ -1,0 +1,17 @@
+{
+  "name": "apmproject",
+  "version": "1.0.0",
+  "main": "newrelic.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node app.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "expressjs": "^1.0.1",
+    "newrelic": "^12.16.0"
+  }
+}
