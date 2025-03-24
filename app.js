@@ -22,6 +22,15 @@ app.get('/slow', (req, res) => {
   }, 2000);
 });
 
+app.get('/api/test', (req, res) => {
+  // Simulate some processing
+  const result = [];
+  for (let i = 0; i < 1000; i++) {
+    result.push({ id: i, value: Math.random() });
+  }
+  res.json(result);
+});
+
 // Error endpoint
 app.get('/error', (req, res) => {
   throw new Error('This is a demonstration error');
