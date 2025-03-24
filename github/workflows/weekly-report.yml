@@ -1,0 +1,61 @@
+name: Weekly Performance Report
+
+on:
+  schedule:
+    - cron: '0 0 * * 1'  # Run every Monday at midnight
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  generate-report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Fetch performance data
+        id: perf-avg
+        uses: newrelic/newrelic-action@v1
+        with:
+          account_id: ${{ secrets.NEW_RELIC_ACCOUNT_ID }}
+          api_key: ${{ secrets.NEW_RELIC_API_KEY }}
+          query: "SELECT average(duration) FROM Transaction WHERE appName = 'Express APM Demo' FACET name LIMIT 5 SINCE 1 week ago"
+          output_type: json
+          
+      - name: Fetch error rate
+        id: error-rate
+        uses: newrelic/newrelic-action@v1
+        with:
+          account_id: ${{ secrets.NEW_RELIC_ACCOUNT_ID }}
+          api_key: ${{ secrets.NEW_RELIC_API_KEY }}
+          query: "SELECT percentage(count(*), WHERE error IS true) FROM Transaction WHERE appName = 'Express APM Demo' SINCE 1 week ago"
+      
+      - name: Generate markdown report
+        run: |
+          echo "# Weekly Performance Report" > performance-report.md
+          echo "Generated on $(date)" >> performance-report.md
+          echo "" >> performance-report.md
+          
+          echo "## Summary" >> performance-report.md
+          echo "" >> performance-report.md
+          echo "- Error rate: ${{ steps.error-rate.outputs.value }}%" >> performance-report.md
+          echo "" >> performance-report.md
+          
+          echo "## Top 5 Transactions by Response Time" >> performance-report.md
+          echo "" >> performance-report.md
+          echo "| Transaction | Average Duration (ms) |" >> performance-report.md
+          echo "|-------------|----------------------|" >> performance-report.md
+          
+          # Parse JSON results and add to markdown table
+          # (In a real workflow, you would use jq or a script to parse the JSON properly)
+          echo "Parsed performance data would be displayed here in a table format" >> performance-report.md
+          
+          echo "" >> performance-report.md
+          echo "## Recommendations" >> performance-report.md
+          echo "" >> performance-report.md
+          echo "- Review the slowest transactions" >> performance-report.md
+          echo "- Investigate any error rate increases" >> performance-report.md
+          
+      - name: Upload performance report
+        uses: actions/upload-artifact@v3
+        with:
+          name: weekly-performance-report
+          path: performance-report.md

@@ -1,0 +1,86 @@
+name: Performance Test
+
+on:
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  performance-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '14'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Create New Relic config
+        run: |
+            cat > newrelic.js << 'EOF'
+            'use strict'
+        
+            exports.config = {
+            app_name: ['Express APM Demo - CI'],
+            license_key: '${{ secrets.NEW_RELIC_LICENSE_KEY }}',
+            logging: {
+                level: 'info'
+            },
+            distributed_tracing: {
+                enabled: true
+            },
+            allow_all_headers: true
+            }
+            EOF
+      
+      - name: Run application with load test
+        run: |
+          npm start &
+          APP_PID=$!
+          echo "Started app with PID: $APP_PID"
+          
+          # Wait for app to start
+          sleep 10
+          
+          # Run load test
+          npm run load-test
+          
+          # Kill the app
+          kill $APP_PID
+      
+      - name: Check APM metrics
+        id: apm-check
+        uses: newrelic/newrelic-action@v1
+        with:
+          account_id: ${{ secrets.NEW_RELIC_ACCOUNT_ID }}
+          api_key: ${{ secrets.NEW_RELIC_API_KEY }}
+          query: "SELECT average(duration) FROM Transaction WHERE appName = 'Express APM Demo - CI' SINCE 5 minutes ago"
+          threshold: "500"
+          operator: "below"
+          
+      - name: Generate performance report
+        run: |
+          echo "# Performance Test Results" > performance-report.md
+          echo "" >> performance-report.md
+          echo "Run on: $(date)" >> performance-report.md
+          echo "" >> performance-report.md
+          echo "## Response Time" >> performance-report.md
+          echo "Average: ${{ steps.apm-check.outputs.value }} ms" >> performance-report.md
+          echo "" >> performance-report.md
+          echo "## Status" >> performance-report.md
+          if [[ "${{ steps.apm-check.outcome }}" == "success" ]]; then
+            echo "✅ Performance test passed" >> performance-report.md
+          else
+            echo "❌ Performance test failed" >> performance-report.md
+          fi
+      
+      - name: Upload performance report
+        uses: actions/upload-artifact@v3
+        with:
+          name: performance-report
+          path: performance-report.md

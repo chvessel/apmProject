@@ -1,0 +1,97 @@
+name: Deploy with Performance Gate
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  performance-gate:
+    runs-on: ubuntu-latest
+    outputs:
+      performance_status: ${{ steps.performance-check.outputs.status }}
+    steps:
+      - name: Check recent performance metrics
+        id: performance-check
+        uses: newrelic/newrelic-action@v1
+        with:
+          account_id: ${{ secrets.NEW_RELIC_ACCOUNT_ID }}
+          api_key: ${{ secrets.NEW_RELIC_API_KEY }}
+          query: "SELECT average(duration) FROM Transaction WHERE appName = 'Express APM Demo' SINCE 1 hour ago"
+          threshold: "300"
+          operator: "below"
+        continue-on-error: true
+      
+      - name: Set performance status
+        id: set-status
+        run: |
+          if [[ "${{ steps.performance-check.outcome }}" == "success" ]]; then
+            echo "status=pass" >> $GITHUB_OUTPUT
+          else
+            echo "status=fail" >> $GITHUB_OUTPUT
+          fi
+  
+  deploy-staging:
+    needs: performance-gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '14'
+      
+      - name: Deploy to staging
+        run: |
+          echo "Deploying to staging environment..."
+          # Your deployment steps here
+      
+      - name: Mark deployment in New Relic
+        uses: newrelic/deployment-marker-action@v1
+        with:
+          api_key: ${{ secrets.NEW_RELIC_API_KEY }}
+          account_id: ${{ secrets.NEW_RELIC_ACCOUNT_ID }}
+          app_name: 'Express APM Demo'
+          revision: ${{ github.sha }}
+          user: ${{ github.actor }}
+          description: 'Deployed to staging'
+  
+  deploy-production:
+    needs: [performance-gate, deploy-staging]
+    runs-on: ubuntu-latest
+    if: needs.performance-gate.outputs.performance_status == 'pass'
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '14'
+      
+      - name: Deploy to production
+        run: |
+          echo "Deploying to production environment..."
+          # Your production deployment steps here
+      
+      - name: Mark deployment in New Relic
+        uses: newrelic/deployment-marker-action@v1
+        with:
+          api_key: ${{ secrets.NEW_RELIC_API_KEY }}
+          account_id: ${{ secrets.NEW_RELIC_ACCOUNT_ID }}
+          app_name: 'Express APM Demo'
+          revision: ${{ github.sha }}
+          user: ${{ github.actor }}
+          description: 'Deployed to production'
+  
+  notify-performance-issue:
+    needs: performance-gate
+    if: needs.performance-gate.outputs.performance_status == 'fail'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send notification
+        run: |
+          echo "Performance gate failed - sending notification"
+          # In a real scenario, you would notify via Slack, email, etc.
+          # For example with Slack:
+          # curl -X POST -H 'Content-type: application/json' --data '{"text":"⚠️ Performance gate failed for deployment"}' ${{ secrets.SLACK_WEBHOOK_URL }}
